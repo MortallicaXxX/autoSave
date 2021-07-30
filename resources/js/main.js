@@ -2,7 +2,7 @@
 window.myApp = {
     showInfo: () => {
         document.getElementById('info').innerHTML = `
-            ${NL_APPID} is running on port ${NL_PORT}  inside ${NL_OS} 
+            ${NL_APPID} is running on port ${NL_PORT}  inside ${NL_OS}
             <br/><br/>
             <span>server: v${NL_VERSION} . client: v${NL_CVERSION}</span>
             `;
@@ -41,7 +41,7 @@ Neutralino.events = {
                 Neutralino.os.showMessageBox({
                     type: "INFO",
                     title: "Version information",
-                    content: `Neutralinojs server: v${NL_VERSION} | Neutralinojs client: v${NL_CVERSION}` 
+                    content: `Neutralinojs server: v${NL_VERSION} | Neutralinojs client: v${NL_CVERSION}`
                 });
                 break;
             case "QUIT":

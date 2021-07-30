@@ -18,18 +18,22 @@ class ExportImage extends thorium.components{
 							onMouseDown : async function(){
 								let x = this.container.get().querySelectorAll('.partitionContainer.active');
 								if(x.length == 0)this.container.get().showError();
-								else this.container.get().th.startCopyProcess(x[0].getAttribute('alt'));
+								else this.container.get().th.startCopyProcess(x[0].getAttribute('mounton'));
 							}
 						}
 					})
 				],
 				proto : {
-					imageDir : `${(window.NL_CWD).split('/')[1]}/${(window.NL_CWD).split('/')[2]}/Images`,
+					imageDir : `/${(window.NL_CWD).split('/')[1]}/${(window.NL_CWD).split('/')[2]}/Images`,
+					partitionPath : null,
 					partitionName : null,
+					textInformation : null,
 					onInitialise : function(){
+						console.log(this.imageDir.get());
 						const self = this;
 						self.getPartitions()
 						.then(function(partitions){
+							console.log(partitions);
 							for(const mediaKey of Object.keys(partitions.medias)){
 								new UI([new partitionContainer(partitions.medias[mediaKey])]).buildIn(self.e.children[0])
 							}
@@ -59,7 +63,7 @@ class ExportImage extends thorium.components{
 											"Dispo" : partitions[i][3],
 											"Uti%" : partitions[i][4],
 											"MontOn" : partitions[i][5],
-											"media" : (partitions[i][5].split("/")[1] == "media" ? true : false),
+											"media" : (partitions[i][5].split("/")[1] == "media" ? partitions[i][5].split("/")[partitions[i][5].split("/").length - 1] : false),
 											"snap" : (partitions[i][5].split("/")[1] == "snap" ? true : false),
 										}
 									}
@@ -71,7 +75,7 @@ class ExportImage extends thorium.components{
 												try{
 													if(typeof key == 'undefined')throw false;
 													if(x[key].snap == true && key)result.snaps[x[key]["Sys."]] = x[key];
-													else if(x[key].media == true && key)result.medias[x[key]["Sys."]] = x[key];
+													else if(x[key].media != false && key)result.medias[x[key]["Sys."]] = x[key];
 													else result.drives[x[key]["Sys."]] = x[key];
 												}catch(err){}
 
@@ -84,9 +88,9 @@ class ExportImage extends thorium.components{
 						})
 
 					},
-					startCopyProcess : async function(partitionName){
-						this.partitionName.set(partitionName);
-						console.log(this.partitionName.get());
+					startCopyProcess : async function(partitionPath){
+						this.partitionPath.set(partitionPath); // sauvegarde du path du média
+						this.partitionName.set(partitionPath.split('/')[partitionPath.split('/').length - 1]); // sauvegarde du nom du média
 						this.showStartNotification();
 						this.copyprocess();
 					},
@@ -97,9 +101,8 @@ class ExportImage extends thorium.components{
 							type : "ERROR"
 						});
 					},
-					showStartNotification : function(){
+					showStartNotification : function(){ // affichage notification lancement de la copy
 						const self = this;
-						console.log(self);
 						Neutralino.os.showNotification({
 							summary: 'Lancement export.',
 							body: `L'export des photos du média ${self.partitionName.get()} vers ${self.imageDir.get()} débute maintenant.`,
@@ -112,15 +115,101 @@ class ExportImage extends thorium.components{
 							new UI([new loadingExportImages()])
 							.buildIn(self.e)
 							.then(function(){
-								self.e.children[0].initialise();
+								self.textInformation.set(self.e.querySelectorAll('div#info')[0]);
 								next(true);
 							})
 						})
 					},
-					copyprocess : function(){
-						this.rebuild()
-						.then(function(){
-							console.log('copyprocess');
+					printTextInformation : function(text){ // fonction qui modifie le texte informatif l'ors de la copie
+						const self = this;
+						setTimeout(function(){
+							self.textInformation.get().innerHTML = `... ${text} ...`;
+						},500);
+					},
+					copyprocess : async function(){ // lancement du processus de copie du média
+
+						const dateCopy = Date.now();
+
+						const self = this;
+
+						function copyFile(originPath,targetPath){
+							return new Promise(function(copy){
+								Neutralino.os.execCommand({
+								    command : `cp ${originPath} ${targetPath}`
+								})
+								.then(function(result){
+									console.log(result);
+									console.log(`cp ${originPath} ${targetPath}`);
+									copy(self.printTextInformation(`copie de ${targetPath}`));
+								})
+							})
+						}
+
+						function createDirectory(fullPath){
+							return new Promise(async function(create){
+								create(await Neutralino.filesystem.createDirectory({
+								  path: fullPath,
+								}));
+							})
+						}
+
+						function readDirectory(path){
+							return Neutralino.filesystem.readDirectory({
+							  path: path
+							})
+						}
+
+						async function proceduralCopy(path){ // lancement de la procédure de copy procédurale
+
+							const fromRootFolder = await (function(){ // extraction du chemin parcourus pour restituer une hierarchie similaire
+								var isRoot = false;
+								return (path.split('/').filter(function(x,i){
+									if(isRoot == true)return `"${x}"`
+									if(x == self.partitionName.get())isRoot = true;
+								}).join('/'));
+							})();
+
+							console.log(`fromRootFolder : ${fromRootFolder}`);
+
+							return new Promise(function(next){
+								readDirectory(path)
+								.then(async function(result){
+
+
+									const entries = result.entries.filter(function(x,i){
+										if(x.entry[0] != '.' && x.entry[0] != '$')return `${x}`;
+									});
+
+									if(entries.length == 0)next(true);
+
+									for(const i of Array.from({length : entries.length} , (x,i) => i)){
+										if(entries[i].type == "DIRECTORY"){
+											await new Promise(async function(create){
+												createDirectory(`/${self.imageDir.get()}/${dateCopy}${(fromRootFolder != '' ? `/${fromRootFolder}/${entries[i].entry}` : `/${entries[i].entry}`)}`)
+												.then(async function(){
+													create(await proceduralCopy(`${path}/${entries[i].entry}`))
+												})
+											})
+										}
+										if(entries[i].type == "FILE" && (entries[i].entry.split('.')[entries[i].entry.split('.').length - 1]/*.toLowerCase()*/ == 'jpeg' || entries[i].entry.split('.')[entries[i].entry.split('.').length - 1]/*.toLowerCase()*/ == 'jpg')){
+											await copyFile(`${path}/${entries[i].entry}`,`${self.imageDir.get()}/${dateCopy}/${(fromRootFolder != '' ? `${fromRootFolder}/${entries[i].entry}` : `${entries[i].entry}`)}`)
+										}
+										if(i == entries.length - 1)next(true);
+									}
+
+								})
+							})
+						}
+
+						await createDirectory(`/${self.imageDir.get()}/${dateCopy}`)
+						return new Promise(function(next){
+							self.rebuild()
+							.then(function(){
+								proceduralCopy(self.partitionPath.get())
+								.then(function(result){
+									next(true);
+								})
+							})
 						})
 					}
 				}
@@ -131,11 +220,16 @@ class ExportImage extends thorium.components{
 
 class partitionContainer extends thorium.components{
 	constructor(partition){
+		console.log(partition);
 		super(new Div({
-			prop : {class : 'partitionContainer' , alt : partition['Sys.']},
+			prop : {
+				class : 'partitionContainer' ,
+				Sys : partition['Sys.'],
+				MountOn : partition['MontOn']
+			},
 			childrens : [
-				(partition.media == true ? new Text(thorium.caches.svg.usb,'center') : new Text(thorium.caches.svg.hdd,'center')),
-				new Text(partition["Sys."],'center')
+				(partition.media != false ? new Text(thorium.caches.svg.usb,'center') : new Text(thorium.caches.svg.hdd,'center')),
+				(partition.media != false ? new Text(partition["media"],'center') : new Text(partition["MontOn"],'center'))
 			],
 			proto : {
 				onMouseDown : function(){
@@ -176,7 +270,20 @@ thorium.onReady = function(self){
 						new Container({
 							prop : {id : 'index_selecteur'},
 							childrens : [
-								new Text('Que voulez vous faire ?','center'),
+								new Div({
+									prop : {id:'acceuil_header'},
+									childrens : [
+										new Text('Que voulez vous faire ?','center')
+									],
+									proto : {
+										onInitialise : function(){
+											new UI([new Div({
+												prop : {text : `bonjour ${window.NL_CWD.split('/')[2]}`}
+											})])
+											.buildIn(this.e)
+										}
+									}
+								}),
 								new Container({
 									prop : {class : 'index_selecteur_container'},
 									childrens : [new Text('Sauvegarder vos photos.','center')],
@@ -184,7 +291,7 @@ thorium.onReady = function(self){
 										dialogBox : null,
 										onMouseDown : async function(e){
 											const dialogBox = thorium.dialog.new({
-												title : `Export photos - Choix support UBS d'origine`,
+												title : `Export photos - Choix support USB d'origine`,
 												// background : "#00012f",
 												modal : true,
 											});
@@ -251,6 +358,25 @@ addCss('style',[`
     display: grid;
 	}
 
+
+	#acceuil_header {
+	  display: grid;
+	  height: fit-content;
+	}
+
+	div#acceuil_header > div {
+		text-align: center;
+		height: fit-content;
+		font-size: 7vw;
+		animation : headerTitle 2s;
+		margin-bottom: 2vw;
+	}
+
+	div#acceuil_header > p {
+    grid-row: 2;
+		animation : headerText 4s 1;
+	}
+
 	.index_selecteur_container {
     margin: auto;
     width: 80%;
@@ -264,6 +390,27 @@ addCss('style',[`
 	.index_selecteur_container:hover {
 		background-color: lightgreen;
 		color : black;
+	}
+
+	@keyframes headerTitle{
+		0% {
+			transform : translateX(-200%);
+		}
+		100% {
+			transform : translateX(0%);
+		}
+	}
+
+	@keyframes headerText{
+		0% {
+			opacity : 0;
+		}
+		50% {
+			opacity : 0;
+		}
+		100% {
+			opacity : 1;
+		}
 	}
 `])
 
