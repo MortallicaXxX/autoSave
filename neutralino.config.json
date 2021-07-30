@@ -1,7 +1,7 @@
 {
   "applicationId": "js.neutralino.sample",
   "port": 0,
-  "defaultMode": "browser",
+  "defaultMode": "window",
   "enableHTTPServer": true,
   "enableNativeAPI": true,
   "url": "/resources/",

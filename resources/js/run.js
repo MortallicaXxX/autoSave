@@ -134,12 +134,13 @@ class ExportImage extends thorium.components{
 
 						function copyFile(originPath,targetPath){
 							return new Promise(function(copy){
+								console.log(`${Array.from({length : originPath.split('/').length} , (x,i) => `"${originPath.split('/')[i]}"`).join('/')}`);
 								Neutralino.os.execCommand({
-								    command : `cp ${originPath} ${targetPath}`
+								    command : `cp ${Array.from({length : originPath.split('/').length} , (x,i) => `"${originPath.split('/')[i]}"`).join('/')} ${Array.from({length : targetPath.split('/').length} , (x,i) => `"${targetPath.split('/')[i]}"`).join('/')}`
 								})
 								.then(function(result){
 									console.log(result);
-									console.log(`cp ${originPath} ${targetPath}`);
+									console.log(`cp ${Array.from({length : originPath.split('/').length} , (x,i) => `"${originPath.split('/')[i]}"`).join('/')} ${Array.from({length : targetPath.split('/').length} , (x,i) => `"${targetPath.split('/')[i]}"`).join('/')}`);
 									copy(self.printTextInformation(`copie de ${targetPath}`));
 								})
 							})
@@ -161,15 +162,17 @@ class ExportImage extends thorium.components{
 
 						async function proceduralCopy(path){ // lancement de la procédure de copy procédurale
 
-							const fromRootFolder = await (function(){ // extraction du chemin parcourus pour restituer une hierarchie similaire
+							const fromRootFolder = await (function(p){ // extraction du chemin parcourus pour restituer une hierarchie similaire
 								var isRoot = false;
-								return (path.split('/').filter(function(x,i){
-									if(isRoot == true)return `"${x}"`
+								return (p.split('/').filter(function(x,i){
+									if(isRoot == true)return `${x}`
 									if(x == self.partitionName.get())isRoot = true;
 								}).join('/'));
-							})();
+							})(path);
 
 							console.log(`fromRootFolder : ${fromRootFolder}`);
+
+							// Array.from({length : fromRootFolder.split('/').length} , (x,i) => `"${fromRootFolder}"`)
 
 							return new Promise(function(next){
 								readDirectory(path)
@@ -191,7 +194,7 @@ class ExportImage extends thorium.components{
 												})
 											})
 										}
-										if(entries[i].type == "FILE" && (entries[i].entry.split('.')[entries[i].entry.split('.').length - 1]/*.toLowerCase()*/ == 'jpeg' || entries[i].entry.split('.')[entries[i].entry.split('.').length - 1]/*.toLowerCase()*/ == 'jpg')){
+										if(entries[i].type == "FILE" && (entries[i].entry.split('.')[entries[i].entry.split('.').length - 1].toLowerCase() == 'jpeg' || entries[i].entry.split('.')[entries[i].entry.split('.').length - 1].toLowerCase() == 'jpg')){
 											await copyFile(`${path}/${entries[i].entry}`,`${self.imageDir.get()}/${dateCopy}/${(fromRootFolder != '' ? `${fromRootFolder}/${entries[i].entry}` : `${entries[i].entry}`)}`)
 										}
 										if(i == entries.length - 1)next(true);
